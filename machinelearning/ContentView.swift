@@ -40,6 +40,7 @@ struct ContentView: View {
     @State private var currentIndex = 0
     @State private var classLabel: String = ""
     @State var selectedItems: PhotosPickerItem? = nil
+    @State var selectedImageData: Data? = nil
     init() {
         do {
             if let modelURL = Bundle.main.url(forResource: "CatBreedClassifier1_1", withExtension: "mlmodelc") {
@@ -52,32 +53,47 @@ struct ContentView: View {
         }
     }
 
-    var  isPreviousButtonValid: Bool {
-        currentIndex != 0
-    }
-    
-    var isNextButtonValid: Bool {
-        currentIndex < images.count - 1
-    }
     
         var body: some View {
             VStack {
                 PhotosPicker(selection: $selectedItems,
-                                    matching: .images) {
+                             matching: .images, photoLibrary: .shared()) {
                            Text("Select a Cat")
                        }
-                Image(images[currentIndex]).resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 300, height: 400, alignment: .topLeading)
-                    .border(.blue)
-                    .clipped()
+                             .onChange(of: selectedItems) { newItem in
+                                 Task{
+                                     if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                                         selectedImageData = data
+                                     }
+                                 }
+                             }
+
+                // Display selected image
+                if let selectedImageData,
+                   let uiImage = UIImage(data: selectedImageData){
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width:250, height: 250)
+                }
+
+
                 
                 Button("Predict") {
-                    // uiImage
-                    guard let uiImage = UIImage(named: images[currentIndex]) else { return }
+                    // Check if selectedImageData is not nil
+                    guard let imageData = selectedImageData else {
+                        return
+                    }
 
-                    // pixelBuffer
-                    guard let pixelBuffer = uiImage.toCVPixelBuffer() else { return }
+                    // Create UIImage from imageData
+                    guard let uiImage = UIImage(data: imageData) else {
+                        return
+                    }
+
+                    // Convert UIImage to CVPixelBuffer
+                    guard let pixelBuffer = uiImage.toCVPixelBuffer() else {
+                        return
+                    }
 
                     do {
                         let result = try imageClassifier?.prediction(image: pixelBuffer)
@@ -93,18 +109,6 @@ struct ContentView: View {
                     }
                 }.buttonStyle(.borderedProminent)
                 Text(classLabel)
-                HStack {
-                    Button("Previous") {
-                            currentIndex -= 1
-                    }.disabled(!isPreviousButtonValid)
-                    Button("Next") {
-                            currentIndex += 1
-                        }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!isNextButtonValid)
-                    .padding()
-                    }
-                
             }
             .padding()
         }
@@ -115,4 +119,3 @@ struct Preview: PreviewProvider {
         ContentView()
     }
 }
-
